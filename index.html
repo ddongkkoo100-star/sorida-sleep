@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0a0a12">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="소리담">
+  <title>소리담 자장</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icons/icon-180.png">
+  <link rel="icon" href="icons/icon-180.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="top">
+    <h1>🌙 소리담</h1>
+    <button id="open-setup" class="icon-btn" aria-label="설정">⚙︎</button>
+  </header>
+
+  <main id="main">
+    <p id="missing-banner" class="banner" hidden>
+      음원을 먼저 가져와야 해요. <button class="link" data-open-setup>가져오기</button>
+    </p>
+
+    <section aria-label="소리 선택" class="sounds" id="sounds">
+      <button class="sound" data-sound="noise">
+        <span class="sound-emoji">🌧️</span>
+        <span class="sound-name">쉬~ 빗소리</span>
+        <span class="sound-sub">밤새 반복</span>
+      </button>
+      <button class="sound" data-sound="brahms">
+        <span class="sound-emoji">🎐</span>
+        <span class="sound-name">브람스 오르골</span>
+        <span class="sound-sub">31분</span>
+      </button>
+      <button class="sound" data-sound="bebefinn">
+        <span class="sound-emoji">🎵</span>
+        <span class="sound-name">베베핀 자장가</span>
+        <span class="sound-sub">52분</span>
+      </button>
+    </section>
+
+    <label class="toggle" id="with-noise-row">
+      <input type="checkbox" id="with-noise">
+      <span class="toggle-ui" aria-hidden="true"></span>
+      <span>빗소리 같이 틀기<small>자장가가 끝나면 빗소리만 계속 나와요</small></span>
+    </label>
+
+    <section aria-label="타이머" class="timer">
+      <h2>끄기 타이머</h2>
+      <div class="segments" id="timer-choices"></div>
+    </section>
+
+    <button id="play" class="play" aria-live="polite">▶︎ 재생</button>
+    <p id="status" class="status" aria-live="polite"></p>
+
+    <button id="lock-screen" class="ghost">🔒 화면 잠그기 (터치 방지)</button>
+  </main>
+
+  <dialog id="setup">
+    <form method="dialog" class="setup-head">
+      <h2>설정</h2>
+      <button class="icon-btn" aria-label="닫기">✕</button>
+    </form>
+
+    <section>
+      <h3>음원</h3>
+      <ul id="track-list" class="track-list"></ul>
+      <label class="file-btn">
+        음원 파일 선택 (5개 한 번에)
+        <input type="file" id="file-input" accept=".m4a,audio/mp4,audio/x-m4a,audio/*" multiple>
+      </label>
+      <p id="import-status" class="hint" aria-live="polite"></p>
+    </section>
+
+    <section>
+      <h3>잠금 테스트</h3>
+      <p class="hint">시작을 누르고 <b>바로 화면을 끄세요.</b> 20초 뒤 빗소리가 오르골로 바뀌면 성공입니다. 1분 뒤 화면을 켜면 결과가 나옵니다.</p>
+      <button id="lock-test" class="secondary">잠금 테스트 시작</button>
+      <div id="lock-test-result" class="result" hidden></div>
+    </section>
+
+    <section>
+      <h3>사용 팁</h3>
+      <ul class="tips">
+        <li>소리 크기는 아이폰 옆 볼륨 버튼으로 조절해요. 작게 틀고, 폰은 아기와 2m 이상 떨어뜨려 두세요.</li>
+        <li>화면을 꺼도 계속 재생돼요. 잠금화면에서 재생·정지할 수 있어요.</li>
+        <li>아이폰에서는 타이머가 끝날 때 소리를 서서히 줄이지 못하고 바로 멈춰요.</li>
+        <li>타이머가 걱정되면 시계 앱 → 타이머 → ‘타이머 종료 시’ → <b>재생 중단</b>을 함께 쓰세요.</li>
+      </ul>
+    </section>
+
+    <section>
+      <details>
+        <summary>재생 기록</summary>
+        <pre id="event-log" class="log"></pre>
+      </details>
+      <button id="clear-tracks" class="danger">저장한 음원 모두 삭제</button>
+    </section>
+  </dialog>
+
+  <div id="lock" class="lock" hidden>
+    <p class="lock-now" id="lock-now"></p>
+    <button id="unlock" class="unlock">
+      <span class="unlock-fill" aria-hidden="true"></span>
+      <span>길게 눌러 잠금 해제</span>
+    </button>
+  </div>
+
+  <audio id="player" preload="auto" playsinline></audio>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
