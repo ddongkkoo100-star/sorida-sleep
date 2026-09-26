@@ -11,7 +11,7 @@
 # 앱이 mix → noise로 넘어갈 때 음량이 튀지 않는다.
 set -euo pipefail
 
-SRC_DIR="${SRC_DIR:-/Users/hj/Music/소리담/다운로드}"
+SRC_DIR="${SRC_DIR:-$HOME/Music/소리담/다운로드}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 OUT="$ROOT/audio"
 WORK="$(mktemp -d)"
