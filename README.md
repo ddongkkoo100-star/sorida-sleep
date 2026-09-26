@@ -21,8 +21,8 @@ npm run serve     # http://localhost:8766 (audio/ 폴더를 바로 사용)
 ```
 
 ## 아이폰에 설치
-1. 앱 코드(음원 제외)를 HTTPS로 호스팅한다(예: GitHub Pages). 음원은 저작권 때문에 올리지 않는다.
-2. `audio/`의 m4a 5개를 아이폰 ‘파일’ 앱으로 옮긴다(iCloud Drive 또는 AirDrop).
+1. 앱 주소: https://ddongkkoo100-star.github.io/sorida-sleep/ (GitHub Pages, 음원 제외). 음원은 저작권 때문에 올리지 않는다.
+2. 음원 5개는 iCloud Drive의 **소리담 음원** 폴더에 있다(아이폰 ‘파일’ 앱 → iCloud Drive).
 3. 아이폰 Safari로 주소 열기 → 공유 → **홈 화면에 추가**.
 4. 홈 화면 앱 실행 → ⚙︎ → **음원 파일 선택** → 5개 모두 선택.
 5. ⚙︎ → **잠금 테스트**로 화면이 꺼진 상태에서 동작하는지 확인.
