@@ -5,6 +5,7 @@ import {
   planPlayback,
   requiredTracks,
   nextAfterFirst,
+  shouldSkipMixTail,
   LOCK_TEST,
   trackIdFromFilename,
   timerState,
@@ -211,6 +212,23 @@ window.addEventListener('pageshow', () => resumeIfInterrupted('pageshow'));
 
 // ---------- 타이머 ----------
 function tick() {
+  // 다시 틀 차례면 믹스 끝의 빗소리 꼬리를 건너뛰고 처음으로 되감는다. 이미 재생 중이라 play()가 필요 없다.
+  // 화면이 꺼져 tick이 늦으면 꼬리를 듣고 'ended'에서 다시 튼다(기존 경로).
+  if (
+    session &&
+    !audio.paused &&
+    shouldSkipMixTail(session.plan, {
+      stage: session.stage,
+      positionMs: audio.currentTime * 1000,
+      durationMs: audio.duration * 1000,
+      now: Date.now(),
+      endsAt: session.endsAt,
+    })
+  ) {
+    session.repeats += 1;
+    audio.currentTime = 0;
+    log('repeat', `${session.plan.first} #${session.repeats + 1} skip-tail`);
+  }
   if (session?.endsAt) {
     const { done, gain } = timerState(Date.now(), session.endsAt, session.fadeMs);
     // iOS는 audio.volume을 무시하므로 서서히 줄이기는 다른 기기에서만 동작한다.

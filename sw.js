@@ -1,6 +1,6 @@
 // 앱 코드만 캐시해서 인터넷 없이도 열리게 한다. 음원은 IndexedDB에 있으므로 여기서 다루지 않는다.
 // 코드를 바꾸면 VERSION을 올린다.
-const VERSION = 'sorida-v3';
+const VERSION = 'sorida-v4'; // index.html의 '앱 버전'과 같이 올린다.
 const SHELL = [
   './',
   'index.html',
