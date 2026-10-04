@@ -41,6 +41,19 @@ export function nextAfterFirst(plan, { now, endsAt }) {
   return 'then';
 }
 
+// *-mix 파일 끝의 꼬리: 자장가가 끝난 뒤 빗소리만 원래 크기로 올라가는 구간.
+// scripts/prepare-audio.sh의 RAMP(초)와 같아야 한다.
+export const MIX_TAIL_MS = 60_000;
+
+// 믹스를 다시 틀 차례라면 꼬리(자장가 없이 빗소리만 나오는 1분)를 건너뛰고 바로 처음으로 되감는다.
+// 마지막 회차(다음이 noise)는 꼬리를 그대로 재생해 빗소리로 자연스럽게 넘어간다.
+export function shouldSkipMixTail(plan, { stage, positionMs, durationMs, now, endsAt }) {
+  if (stage !== 'first' || !plan.first.endsWith('-mix')) return false;
+  if (!Number.isFinite(durationMs) || durationMs <= MIX_TAIL_MS) return false;
+  if (positionMs < durationMs - MIX_TAIL_MS) return false;
+  return nextAfterFirst(plan, { now, endsAt }) === 'repeat';
+}
+
 // 잠금 테스트: 첫 곡을 끝 20초 전부터 튼다. 타이머를 REPEAT_MIN_LEFT_MS + 30초로 잡아
 // 20초 뒤 첫 끝에서는 다시 틀고('repeat'), 40초 뒤 두 번째 끝에서는 다음 곡으로 넘어간다('then').
 export const LOCK_TEST = { seekToEnd: 20, timerMin: (REPEAT_MIN_LEFT_MS + 30_000) / 60_000 };

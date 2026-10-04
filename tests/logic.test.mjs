@@ -5,6 +5,8 @@ import {
   requiredTracks,
   nextAfterFirst,
   REPEAT_MIN_LEFT_MS,
+  MIX_TAIL_MS,
+  shouldSkipMixTail,
   LOCK_TEST,
   trackIdFromFilename,
   timerState,
@@ -80,6 +82,32 @@ test('브람스 + 30분/15분 타이머: 믹스 하나로 충분함', () => {
 
 test('베베핀(53분 믹스) + 60분 타이머: 7분만 남으므로 다시 틀지 않고 빗소리로 마무리', () => {
   assert.deepEqual(simulate(53, 60), { passes: 1, finishedBy: 'noise' });
+});
+
+// 브람스 믹스 = 오르골 1881.4초 + 빗소리 꼬리 60초
+const BRAHMS_MIX_MS = 1_941_434;
+const tailAt = (positionMs, { now = 0, endsAt = 60 * MIN, stage = 'first', plan = mixPlan, durationMs = BRAHMS_MIX_MS } = {}) =>
+  shouldSkipMixTail(plan, { stage, positionMs, durationMs, now, endsAt });
+
+test('꼬리 건너뛰기: 오르골이 끝나는 지점(파일 끝 60초 전)부터, 다시 틀 차례일 때만', () => {
+  assert.equal(MIX_TAIL_MS, 60_000);
+  assert.equal(tailAt(BRAHMS_MIX_MS - MIX_TAIL_MS - 1), false); // 아직 오르골 재생 중
+  assert.equal(tailAt(BRAHMS_MIX_MS - MIX_TAIL_MS), true); // 오르골 끝 → 처음으로
+  assert.equal(tailAt(BRAHMS_MIX_MS - 1000), true);
+});
+
+test('꼬리 건너뛰기 안 함: 마지막 회차·타이머 없음은 꼬리를 들으며 빗소리로 넘어감', () => {
+  const pos = BRAHMS_MIX_MS - 30_000;
+  assert.equal(tailAt(pos, { now: 0, endsAt: 9 * MIN }), false); // 남은 시간 < 10분
+  assert.equal(tailAt(pos, { endsAt: null }), false); // 타이머 '계속'
+});
+
+test('꼬리 건너뛰기 안 함: 믹스가 아니거나, 이미 빗소리 단계거나, 길이를 모를 때', () => {
+  const pos = BRAHMS_MIX_MS - 30_000;
+  assert.equal(tailAt(pos, { plan: { first: 'noise', loopFirst: false, then: 'brahms' } }), false); // 잠금 테스트
+  assert.equal(tailAt(pos, { stage: 'then' }), false);
+  assert.equal(tailAt(pos, { durationMs: NaN }), false);
+  assert.equal(tailAt(30_000, { durationMs: 50_000 }), false); // 꼬리보다 짧은 파일
 });
 
 test('잠금 테스트: 20초 뒤 첫 끝에서 다시 틀고, 40초 뒤 두 번째 끝에서 다음 곡으로 넘어감', () => {
