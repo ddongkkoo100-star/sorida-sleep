@@ -14,9 +14,12 @@ export const SOUNDS = ['noise', 'brahms', 'bebefinn'];
 
 export const TIMER_CHOICES = [0, 15, 30, 60, 90]; // 0 = 계속
 
+// 타이머가 있을 때, 믹스가 끝난 시점에 이만큼 이상 남았으면 자장가를 다시 튼다.
+export const REPEAT_MIN_LEFT_MS = 10 * 60_000;
+
 // 화면이 꺼진 동안에도 끊기지 않도록 항상 <audio> 하나로만 재생한다.
-// 자장가+백색소음은 미리 섞어 둔 *-mix 파일을 한 번 재생하고,
-// 끝나면 같은 요소에서 noise로 넘어가 계속 반복한다.
+// 자장가+백색소음은 미리 섞어 둔 *-mix 파일을 재생하고,
+// 끝나면 같은 요소에서 noise로 넘어가 계속 반복한다. (타이머가 넉넉하면 믹스를 먼저 다시 튼다: nextAfterFirst)
 export function planPlayback({ sound, withNoise }) {
   if (!SOUNDS.includes(sound)) throw new Error(`unknown sound: ${sound}`);
   if (sound === 'noise') return { first: 'noise', loopFirst: true, then: null };
@@ -26,6 +29,16 @@ export function planPlayback({ sound, withNoise }) {
 
 export function requiredTracks(plan) {
   return plan.then ? [plan.first, plan.then] : [plan.first];
+}
+
+// 첫 트랙(자장가+빗소리 믹스)이 끝났을 때 다음 동작.
+// 'repeat': 같은 믹스를 다시 튼다 — 타이머가 REPEAT_MIN_LEFT_MS 이상 남았을 때.
+// 'then': plan.then(noise)로 넘어간다 — 타이머가 없거나 조금 남았을 때. 빗소리가 이어져 음량이 튀지 않는다.
+// 'stop': 이어질 곡이 없다.
+export function nextAfterFirst(plan, { now, endsAt }) {
+  if (!plan.then) return 'stop';
+  if (endsAt && endsAt - now >= REPEAT_MIN_LEFT_MS) return 'repeat';
+  return 'then';
 }
 
 // 사용자가 고른 파일 이름으로 트랙을 찾는다. "brahms-mix (1).m4a" 같은 이름도 허용.
