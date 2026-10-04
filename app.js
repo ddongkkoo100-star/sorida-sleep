@@ -5,6 +5,7 @@ import {
   planPlayback,
   requiredTracks,
   nextAfterFirst,
+  LOCK_TEST,
   trackIdFromFilename,
   timerState,
   fadeDurationMs,
@@ -124,11 +125,12 @@ function setSource(id, loop) {
   updateMediaSession();
 }
 
-function play(reason) {
+function play(reason, onRejected) {
   log('play', `${reason} ${session?.trackId ?? ''}`);
   const p = audio.play();
   p?.catch((err) => {
     log('play-rejected', `${reason} ${err.name}`);
+    onRejected?.(err);
     render();
   });
 }
@@ -147,12 +149,27 @@ function resumeIfInterrupted(why) {
   if (session && !session.userPaused && audio.paused) play(`resume:${why}`);
 }
 
+// 잠금 테스트용: 첫 곡은 (다시 틀 때도) 끝 부분부터 재생해 짧게 확인한다.
 audio.addEventListener('loadedmetadata', () => {
   if (session?.seekToEnd && session.stage === 'first') {
     audio.currentTime = Math.max(0, audio.duration - session.seekToEnd);
-    session.seekToEnd = 0;
   }
 });
+
+function switchToThen(reason) {
+  session.stage = 'then';
+  setSource(session.plan.then, true);
+  play(reason);
+  log('switch', session.plan.then);
+}
+
+// 다시 틀기가 거부되면 소리가 끊기지 않도록 기존처럼 빗소리로 넘어간다.
+// 사용자가 멈췄거나, 이미 다른 곡으로 넘어갔거나, 다른 재생 요청으로 이미 소리가 나는 경우는 건드리지 않는다.
+function repeatRejected() {
+  if (!session || session.userPaused || session.stage !== 'first' || !audio.paused) return;
+  log('repeat-failed', session.trackId);
+  switchToThen('repeat-fallback');
+}
 
 audio.addEventListener('ended', () => {
   log('ended', session?.trackId ?? '');
@@ -162,13 +179,10 @@ audio.addEventListener('ended', () => {
     // 타이머가 넉넉하면 자장가를 다시 튼다. 곡이 바뀔 때와 같이 같은 요소에 src만 다시 지정한다.
     session.repeats += 1;
     setSource(session.plan.first, false);
-    play('repeat');
+    play('repeat', repeatRejected);
     log('repeat', `${session.plan.first} #${session.repeats + 1}`);
   } else if (next === 'then') {
-    session.stage = 'then';
-    setSource(session.plan.then, true);
-    play('next');
-    log('switch', session.plan.then);
+    switchToThen('next');
   } else {
     stop('ended');
   }
@@ -339,7 +353,8 @@ function startLockTest() {
   $('#lock-test-result').hidden = true;
   $('#setup').close();
   if (session) stop('lock-test');
-  start({ plan: { first: 'noise', loopFirst: false, then: 'brahms' }, seekToEnd: 20, timerMin: 0 });
+  // 빗소리 끝 20초 → 같은 곡 다시 틀기(끝 20초) → 오르골. 타이머 길이로 두 갈래를 모두 지나간다(LOCK_TEST).
+  start({ plan: { first: 'noise', loopFirst: false, then: 'brahms' }, ...LOCK_TEST });
 }
 
 function showLockTestResult() {
@@ -349,7 +364,7 @@ function showLockTestResult() {
   } catch {
     test = null;
   }
-  if (!test || Date.now() - test.startedAt < 25_000) return;
+  if (!test || Date.now() - test.startedAt < 45_000) return;
   safeSet('locktest', 'null');
 
   const entries = readLog().filter((e) => Date.parse(e.t) >= test.startedAt);
@@ -360,11 +375,18 @@ function showLockTestResult() {
   } else {
     const stoppedWhileHidden = entries.some((e) => e.ev === 'interrupted' && e.hidden);
     const switchedWhileHidden = entries.some((e) => e.ev === 'switch' && e.hidden);
+    const repeatedWhileHidden =
+      entries.some((e) => e.ev === 'repeat' && e.hidden) && !entries.some((e) => e.ev === 'repeat-failed');
     const ticked = entries.some((e) => e.ev === 'tick-hidden');
     lines.push(
       stoppedWhileHidden
         ? '❌ 화면이 꺼진 뒤 소리가 멈췄어요. 홈 화면 앱 대신 Safari에서 열어 다시 테스트해 보세요.'
         : '✅ 화면이 꺼져도 소리가 계속 나왔어요.',
+    );
+    lines.push(
+      repeatedWhileHidden
+        ? '✅ 화면이 꺼진 상태에서 같은 곡을 다시 틀었어요. 타이머를 켜면 자장가가 반복돼요.'
+        : '❌ 화면이 꺼진 동안 같은 곡을 다시 틀지 못했어요. 타이머를 켜도 자장가는 한 번만 나오고 빗소리로 넘어가요.',
     );
     lines.push(
       switchedWhileHidden
