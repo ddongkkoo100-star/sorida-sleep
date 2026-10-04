@@ -5,6 +5,7 @@ import {
   requiredTracks,
   nextAfterFirst,
   REPEAT_MIN_LEFT_MS,
+  LOCK_TEST,
   trackIdFromFilename,
   timerState,
   fadeDurationMs,
@@ -79,6 +80,16 @@ test('브람스 + 30분/15분 타이머: 믹스 하나로 충분함', () => {
 
 test('베베핀(53분 믹스) + 60분 타이머: 7분만 남으므로 다시 틀지 않고 빗소리로 마무리', () => {
   assert.deepEqual(simulate(53, 60), { passes: 1, finishedBy: 'noise' });
+});
+
+test('잠금 테스트: 20초 뒤 첫 끝에서 다시 틀고, 40초 뒤 두 번째 끝에서 다음 곡으로 넘어감', () => {
+  const plan = { first: 'noise', loopFirst: false, then: 'brahms' };
+  const endsAt = LOCK_TEST.timerMin * MIN;
+  assert.equal(LOCK_TEST.seekToEnd, 20);
+  assert.equal(nextAfterFirst(plan, { now: 20_000, endsAt }), 'repeat');
+  assert.equal(nextAfterFirst(plan, { now: 40_000, endsAt }), 'then');
+  // 결과를 보는 1분 동안 타이머가 먼저 끝나 버리면 안 된다.
+  assert.ok(endsAt > 60_000);
 });
 
 test('알 수 없는 소리는 거부', () => {

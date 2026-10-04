@@ -41,6 +41,10 @@ export function nextAfterFirst(plan, { now, endsAt }) {
   return 'then';
 }
 
+// 잠금 테스트: 첫 곡을 끝 20초 전부터 튼다. 타이머를 REPEAT_MIN_LEFT_MS + 30초로 잡아
+// 20초 뒤 첫 끝에서는 다시 틀고('repeat'), 40초 뒤 두 번째 끝에서는 다음 곡으로 넘어간다('then').
+export const LOCK_TEST = { seekToEnd: 20, timerMin: (REPEAT_MIN_LEFT_MS + 30_000) / 60_000 };
+
 // 사용자가 고른 파일 이름으로 트랙을 찾는다. "brahms-mix (1).m4a" 같은 이름도 허용.
 export function trackIdFromFilename(name) {
   const base = name.toLowerCase().replace(/\.[a-z0-9]+$/, '');
