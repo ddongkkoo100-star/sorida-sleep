@@ -4,6 +4,7 @@ import {
   TIMER_CHOICES,
   planPlayback,
   requiredTracks,
+  nextAfterFirst,
   trackIdFromFilename,
   timerState,
   fadeDurationMs,
@@ -29,7 +30,7 @@ let settings = parseSettings(safeGet('settings'));
 const urls = new Map(); // trackId → 재생 URL(blob: 또는 개발용 audio/ 경로)
 const sizes = new Map();
 // 재생 중인 상태. null이면 멈춤.
-// { plan, stage: 'first'|'then', trackId, endsAt, fadeMs, userPaused, seekToEnd }
+// { plan, stage: 'first'|'then', trackId, endsAt, fadeMs, userPaused, seekToEnd, repeats }
 let session = null;
 
 // ---------- 저장소 헬퍼 ----------
@@ -108,6 +109,7 @@ function start({ plan = planPlayback(settings), seekToEnd = 0, timerMin = settin
     fadeMs: fadeDurationMs(timerMin),
     userPaused: false,
     seekToEnd,
+    repeats: 0,
   };
   audio.volume = 1;
   setSource(plan.first, plan.loopFirst);
@@ -155,7 +157,14 @@ audio.addEventListener('loadedmetadata', () => {
 audio.addEventListener('ended', () => {
   log('ended', session?.trackId ?? '');
   if (!session) return;
-  if (session.stage === 'first' && session.plan.then) {
+  const next = session.stage === 'first' ? nextAfterFirst(session.plan, { now: Date.now(), endsAt: session.endsAt }) : 'stop';
+  if (next === 'repeat') {
+    // 타이머가 넉넉하면 자장가를 다시 튼다. 곡이 바뀔 때와 같이 같은 요소에 src만 다시 지정한다.
+    session.repeats += 1;
+    setSource(session.plan.first, false);
+    play('repeat');
+    log('repeat', `${session.plan.first} #${session.repeats + 1}`);
+  } else if (next === 'then') {
     session.stage = 'then';
     setSource(session.plan.then, true);
     play('next');
@@ -274,6 +283,7 @@ function renderStatus() {
   let text = '';
   if (session) {
     text = `${TRACKS[session.trackId].title}${audio.paused ? ' · 멈춤' : ' 재생 중'}`;
+    if (session.stage === 'first' && session.repeats) text += ` · ${session.repeats + 1}번째`;
     if (session.endsAt) text += ` · ${formatRemaining(session.endsAt - Date.now())} 뒤 꺼짐`;
   }
   $('#status').textContent = text;
