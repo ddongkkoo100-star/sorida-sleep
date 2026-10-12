@@ -4,7 +4,6 @@ import {
   planPlayback,
   requiredTracks,
   nextAfterFirst,
-  REPEAT_MIN_LEFT_MS,
   MIX_TAIL_MS,
   shouldSkipMixTail,
   LOCK_TEST,
@@ -37,15 +36,20 @@ test('믹스가 끝났을 때: 타이머가 없으면 noise로 넘어감(기존 
   assert.equal(nextAfterFirst(mixPlan, { now: 0, endsAt: null }), 'then');
 });
 
-test('믹스가 끝났을 때: 타이머가 10분 이상 남았으면 믹스를 다시 틂', () => {
-  assert.equal(REPEAT_MIN_LEFT_MS, 10 * MIN);
+test('믹스가 끝났을 때: 타이머가 남았으면 믹스를 다시 틂', () => {
   assert.equal(nextAfterFirst(mixPlan, { now: 0, endsAt: 27 * MIN }), 'repeat');
   assert.equal(nextAfterFirst(mixPlan, { now: 0, endsAt: 10 * MIN }), 'repeat');
 });
 
-test('믹스가 끝났을 때: 타이머가 10분 미만 남았으면 noise로 넘어감', () => {
-  assert.equal(nextAfterFirst(mixPlan, { now: 0, endsAt: 10 * MIN - 1 }), 'then');
-  assert.equal(nextAfterFirst(mixPlan, { now: 5 * MIN, endsAt: 7 * MIN }), 'then');
+test('믹스가 끝났을 때: 10분 미만 또는 1ms만 남아도 반복', () => {
+  assert.equal(nextAfterFirst(mixPlan, { now: 0, endsAt: 10 * MIN - 1 }), 'repeat');
+  assert.equal(nextAfterFirst(mixPlan, { now: 5 * MIN, endsAt: 7 * MIN }), 'repeat');
+  assert.equal(nextAfterFirst(mixPlan, { now: 100, endsAt: 101 }), 'repeat');
+});
+
+test('믹스가 끝났을 때: 종료 시각에 도달하거나 지났으면 정지', () => {
+  assert.equal(nextAfterFirst(mixPlan, { now: 100, endsAt: 100 }), 'stop');
+  assert.equal(nextAfterFirst(mixPlan, { now: 101, endsAt: 100 }), 'stop');
 });
 
 test('이어질 곡이 없으면 stop (자장가만 반복 재생하는 계획)', () => {
@@ -80,8 +84,8 @@ test('브람스 + 30분/15분 타이머: 믹스 하나로 충분함', () => {
   assert.deepEqual(simulate(32.4, 15), { passes: 1, finishedBy: 'timer' });
 });
 
-test('베베핀(53분 믹스) + 60분 타이머: 7분만 남으므로 다시 틀지 않고 빗소리로 마무리', () => {
-  assert.deepEqual(simulate(53, 60), { passes: 1, finishedBy: 'noise' });
+test('베베핀(53분 믹스) + 60분 타이머: 남은 7분도 자장가 반복', () => {
+  assert.deepEqual(simulate(53, 60), { passes: 2, finishedBy: 'timer' });
 });
 
 // 브람스 믹스 = 오르골 1881.4초 + 빗소리 꼬리 60초
@@ -96,9 +100,10 @@ test('꼬리 건너뛰기: 오르골이 끝나는 지점(파일 끝 60초 전)�
   assert.equal(tailAt(BRAHMS_MIX_MS - 1000), true);
 });
 
-test('꼬리 건너뛰기 안 함: 마지막 회차·타이머 없음은 꼬리를 들으며 빗소리로 넘어감', () => {
+test('꼬리 건너뛰기: 남은 시간이 짧아도 반복, 타이머 없음·만료는 제외', () => {
   const pos = BRAHMS_MIX_MS - 30_000;
-  assert.equal(tailAt(pos, { now: 0, endsAt: 9 * MIN }), false); // 남은 시간 < 10분
+  assert.equal(tailAt(pos, { now: 0, endsAt: 9 * MIN }), true);
+  assert.equal(tailAt(pos, { now: 9 * MIN, endsAt: 9 * MIN }), false);
   assert.equal(tailAt(pos, { endsAt: null }), false); // 타이머 '계속'
 });
 
@@ -110,14 +115,9 @@ test('꼬리 건너뛰기 안 함: 믹스가 아니거나, 이미 빗소리 단�
   assert.equal(tailAt(30_000, { durationMs: 50_000 }), false); // 꼬리보다 짧은 파일
 });
 
-test('잠금 테스트: 20초 뒤 첫 끝에서 다시 틀고, 40초 뒤 두 번째 끝에서 다음 곡으로 넘어감', () => {
-  const plan = { first: 'noise', loopFirst: false, then: 'brahms' };
-  const endsAt = LOCK_TEST.timerMin * MIN;
+test('잠금 테스트: 곡 끝 20초부터 재생하고 결과 확인까지 타이머 유지', () => {
   assert.equal(LOCK_TEST.seekToEnd, 20);
-  assert.equal(nextAfterFirst(plan, { now: 20_000, endsAt }), 'repeat');
-  assert.equal(nextAfterFirst(plan, { now: 40_000, endsAt }), 'then');
-  // 결과를 보는 1분 동안 타이머가 먼저 끝나 버리면 안 된다.
-  assert.ok(endsAt > 60_000);
+  assert.ok(LOCK_TEST.timerMin * MIN > 60_000);
 });
 
 test('알 수 없는 소리는 거부', () => {

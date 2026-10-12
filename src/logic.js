@@ -14,12 +14,9 @@ export const SOUNDS = ['noise', 'brahms', 'bebefinn'];
 
 export const TIMER_CHOICES = [0, 15, 30, 60, 90]; // 0 = 계속
 
-// 타이머가 있을 때, 믹스가 끝난 시점에 이만큼 이상 남았으면 자장가를 다시 튼다.
-export const REPEAT_MIN_LEFT_MS = 10 * 60_000;
-
 // 화면이 꺼진 동안에도 끊기지 않도록 항상 <audio> 하나로만 재생한다.
 // 자장가+백색소음은 미리 섞어 둔 *-mix 파일을 재생하고,
-// 끝나면 같은 요소에서 noise로 넘어가 계속 반복한다. (타이머가 넉넉하면 믹스를 먼저 다시 튼다: nextAfterFirst)
+// 타이머가 있으면 같은 믹스를 반복하고, '계속'이면 noise로 넘어간다.
 export function planPlayback({ sound, withNoise }) {
   if (!SOUNDS.includes(sound)) throw new Error(`unknown sound: ${sound}`);
   if (sound === 'noise') return { first: 'noise', loopFirst: true, then: null };
@@ -32,12 +29,13 @@ export function requiredTracks(plan) {
 }
 
 // 첫 트랙(자장가+빗소리 믹스)이 끝났을 때 다음 동작.
-// 'repeat': 같은 믹스를 다시 튼다 — 타이머가 REPEAT_MIN_LEFT_MS 이상 남았을 때.
-// 'then': plan.then(noise)로 넘어간다 — 타이머가 없거나 조금 남았을 때. 빗소리가 이어져 음량이 튀지 않는다.
-// 'stop': 이어질 곡이 없다.
+// 'repeat': 종료 시각까지 같은 믹스를 다시 튼다.
+// 'then': 타이머가 없으면 plan.then(noise)로 넘어간다.
+// 'stop': 타이머가 끝났거나 이어질 곡이 없다.
 export function nextAfterFirst(plan, { now, endsAt }) {
+  if (endsAt != null && now >= endsAt) return 'stop';
   if (!plan.then) return 'stop';
-  if (endsAt && endsAt - now >= REPEAT_MIN_LEFT_MS) return 'repeat';
+  if (endsAt != null) return 'repeat';
   return 'then';
 }
 
@@ -46,7 +44,7 @@ export function nextAfterFirst(plan, { now, endsAt }) {
 export const MIX_TAIL_MS = 60_000;
 
 // 믹스를 다시 틀 차례라면 꼬리(자장가 없이 빗소리만 나오는 1분)를 건너뛰고 바로 처음으로 되감는다.
-// 마지막 회차(다음이 noise)는 꼬리를 그대로 재생해 빗소리로 자연스럽게 넘어간다.
+// 타이머가 없으면 꼬리를 그대로 재생해 빗소리로 자연스럽게 넘어간다.
 export function shouldSkipMixTail(plan, { stage, positionMs, durationMs, now, endsAt }) {
   if (stage !== 'first' || !plan.first.endsWith('-mix')) return false;
   if (!Number.isFinite(durationMs) || durationMs <= MIX_TAIL_MS) return false;
@@ -54,9 +52,9 @@ export function shouldSkipMixTail(plan, { stage, positionMs, durationMs, now, en
   return nextAfterFirst(plan, { now, endsAt }) === 'repeat';
 }
 
-// 잠금 테스트: 첫 곡을 끝 20초 전부터 튼다. 타이머를 REPEAT_MIN_LEFT_MS + 30초로 잡아
-// 20초 뒤 첫 끝에서는 다시 틀고('repeat'), 40초 뒤 두 번째 끝에서는 다음 곡으로 넘어간다('then').
-export const LOCK_TEST = { seekToEnd: 20, timerMin: (REPEAT_MIN_LEFT_MS + 30_000) / 60_000 };
+// 잠금 테스트: 끝 20초를 한 번 반복한 뒤 app.js에서 다음 곡으로 전환한다.
+// 실제 반복 정책과 분리하고, 결과를 확인하는 1분 동안 타이머가 끝나지 않게 한다.
+export const LOCK_TEST = { seekToEnd: 20, timerMin: 2 };
 
 // 사용자가 고른 파일 이름으로 트랙을 찾는다. "brahms-mix (1).m4a" 같은 이름도 허용.
 export function trackIdFromFilename(name) {

@@ -34,6 +34,7 @@ const sizes = new Map();
 // 재생 중인 상태. null이면 멈춤.
 // { plan, stage: 'first'|'then', trackId, endsAt, fadeMs, userPaused, seekToEnd, repeats }
 let session = null;
+let playRequest = 0;
 
 // ---------- 저장소 헬퍼 ----------
 function safeGet(key) {
@@ -120,6 +121,7 @@ function start({ plan = planPlayback(settings), seekToEnd = 0, timerMin = settin
 }
 
 function setSource(id, loop) {
+  playRequest += 1;
   audio.loop = loop;
   audio.src = urls.get(id);
   session.trackId = id;
@@ -127,9 +129,14 @@ function setSource(id, loop) {
 }
 
 function play(reason, onRejected) {
+  if (!session || stopIfTimerExpired()) return;
+  const requestedSession = session;
+  const request = ++playRequest;
   log('play', `${reason} ${session?.trackId ?? ''}`);
   const p = audio.play();
   p?.catch((err) => {
+    // 이전 재생 요청의 실패가 새 재생을 바꾸지 않게 한다.
+    if (session !== requestedSession || request !== playRequest || stopIfTimerExpired()) return;
     log('play-rejected', `${reason} ${err.name}`);
     onRejected?.(err);
     render();
@@ -138,6 +145,7 @@ function play(reason, onRejected) {
 
 function stop(reason) {
   if (!session) return;
+  playRequest += 1;
   log('stop', reason);
   session = null;
   audio.pause();
@@ -146,7 +154,16 @@ function stop(reason) {
   render();
 }
 
+function stopIfTimerExpired() {
+  if (session?.endsAt != null && Date.now() >= session.endsAt) {
+    stop('timer');
+    return true;
+  }
+  return false;
+}
+
 function resumeIfInterrupted(why) {
+  if (stopIfTimerExpired()) return;
   if (session && !session.userPaused && audio.paused) play(`resume:${why}`);
 }
 
@@ -158,15 +175,17 @@ audio.addEventListener('loadedmetadata', () => {
 });
 
 function switchToThen(reason) {
+  if (!session || stopIfTimerExpired()) return;
   session.stage = 'then';
   setSource(session.plan.then, true);
-  play(reason);
   log('switch', session.plan.then);
+  play(reason);
 }
 
 // 다시 틀기가 거부되면 소리가 끊기지 않도록 기존처럼 빗소리로 넘어간다.
 // 사용자가 멈췄거나, 이미 다른 곡으로 넘어갔거나, 다른 재생 요청으로 이미 소리가 나는 경우는 건드리지 않는다.
 function repeatRejected() {
+  if (stopIfTimerExpired()) return;
   if (!session || session.userPaused || session.stage !== 'first' || !audio.paused) return;
   log('repeat-failed', session.trackId);
   switchToThen('repeat-fallback');
@@ -174,14 +193,19 @@ function repeatRejected() {
 
 audio.addEventListener('ended', () => {
   log('ended', session?.trackId ?? '');
-  if (!session) return;
-  const next = session.stage === 'first' ? nextAfterFirst(session.plan, { now: Date.now(), endsAt: session.endsAt }) : 'stop';
+  if (!session || stopIfTimerExpired()) return;
+  // 잠금 테스트만 한 번 반복 후 다음 곡으로 이동한다. 일반 재생은 종료 시각까지 반복한다.
+  const finishedTestRepeat = session.seekToEnd && session.repeats > 0;
+  let next = 'stop';
+  if (session.stage === 'first') {
+    next = finishedTestRepeat ? 'then' : nextAfterFirst(session.plan, { now: Date.now(), endsAt: session.endsAt });
+  }
   if (next === 'repeat') {
-    // 타이머가 넉넉하면 자장가를 다시 튼다. 곡이 바뀔 때와 같이 같은 요소에 src만 다시 지정한다.
+    // 타이머가 남아 있으면 같은 요소에서 자장가를 다시 튼다.
     session.repeats += 1;
     setSource(session.plan.first, false);
-    play('repeat', repeatRejected);
     log('repeat', `${session.plan.first} #${session.repeats + 1}`);
+    play('repeat', repeatRejected);
   } else if (next === 'then') {
     switchToThen('next');
   } else {
@@ -196,6 +220,7 @@ audio.addEventListener('pause', () => {
   render();
 });
 audio.addEventListener('playing', () => {
+  if (stopIfTimerExpired()) return;
   updateMediaSession();
   render();
 });
@@ -212,6 +237,7 @@ window.addEventListener('pageshow', () => resumeIfInterrupted('pageshow'));
 
 // ---------- 타이머 ----------
 function tick() {
+  if (stopIfTimerExpired()) return;
   // 다시 틀 차례면 믹스 끝의 빗소리 꼬리를 건너뛰고 처음으로 되감는다. 이미 재생 중이라 play()가 필요 없다.
   // 화면이 꺼져 tick이 늦으면 꼬리를 듣고 'ended'에서 다시 튼다(기존 경로).
   if (
@@ -371,7 +397,7 @@ function startLockTest() {
   $('#lock-test-result').hidden = true;
   $('#setup').close();
   if (session) stop('lock-test');
-  // 빗소리 끝 20초 → 같은 곡 다시 틀기(끝 20초) → 오르골. 타이머 길이로 두 갈래를 모두 지나간다(LOCK_TEST).
+  // 빗소리 끝 20초 → 같은 곡 다시 틀기(끝 20초) → 오르골.
   start({ plan: { first: 'noise', loopFirst: false, then: 'brahms' }, ...LOCK_TEST });
 }
 
@@ -468,12 +494,21 @@ function wire() {
   $('#timer-choices').addEventListener('click', (e) => {
     const btn = e.target.closest('button');
     if (!btn) return;
+    stopIfTimerExpired();
     settings = { ...settings, timerMin: Number(btn.dataset.min) };
     saveSettings();
     if (session) {
       session.endsAt = settings.timerMin ? Date.now() + settings.timerMin * 60_000 : null;
       session.fadeMs = fadeDurationMs(settings.timerMin);
       audio.volume = 1;
+      // '계속' 또는 반복 실패로 빗소리에 도달한 뒤 타이머를 켜면 선택한 믹스로 돌아간다.
+      if (settings.timerMin && session.stage === 'then' && session.plan.first.endsWith('-mix')) {
+        const wasPaused = audio.paused;
+        session.stage = 'first';
+        session.repeats = 0;
+        setSource(session.plan.first, session.plan.loopFirst);
+        if (!wasPaused) play('timer-change', repeatRejected);
+      }
     }
     render();
   });
